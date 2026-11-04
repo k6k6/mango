@@ -52,8 +52,13 @@ enum {
 	DWINDLE,
 	FAIR,
 	VERTICAL_FAIR,
+	SCROLLER_DECK,
 };
 
-extern Layout layouts[14];
+static inline bool is_scroller_layout_id(uint32_t id) {
+	return id == SCROLLER || id == VERTICAL_SCROLLER || id == SCROLLER_DECK;
+}
+
+extern Layout layouts[15];
 
 #endif

@@ -52,6 +52,10 @@ void scroller_arrange_stack_vertical_node(struct ScrollerStackNode *head,
 										  const LayoutContext *ctx);
 void scroller(Monitor *m);
 bool scroller_predict(Monitor *m, Client *c, struct wlr_box *out);
+void scroller_deck(Monitor *m);
+bool scroller_deck_predict(Monitor *m, Client *c, struct wlr_box *out);
+float scroller_get_proportion(Client *c);
+void scroller_set_proportion(Client *c, float proportion);
 void vertical_scroller(Monitor *m);
 bool vertical_scroller_predict(Monitor *m, Client *c, struct wlr_box *out);
 void scroller_remove_client(Client *c);

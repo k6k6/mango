@@ -511,6 +511,9 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 	if (strcmp(func_name, "focusstack") == 0) {
 		func = focus_stack;
 		(*arg).i = parse_circle_direction(arg_value);
+	} else if (strcmp(func_name, "focusdeck") == 0) {
+		func = focus_deck;
+		(*arg).i = parse_circle_direction(arg_value);
 	} else if (strcmp(func_name, "overcircle") == 0) {
 		func = over_circle;
 		(*arg).i = parse_overcircle_direction(arg_value);
@@ -532,6 +535,12 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 		func = focus_by_id;
 	} else if (strcmp(func_name, "incnmaster") == 0) {
 		func = inc_nmaster;
+		(*arg).i = atoi(arg_value);
+	} else if (strcmp(func_name, "inc_scroller_master_count") == 0) {
+		func = inc_scroller_master_count;
+		(*arg).i = atoi(arg_value);
+	} else if (strcmp(func_name, "set_scroller_master_count") == 0) {
+		func = set_scroller_master_count;
 		(*arg).i = atoi(arg_value);
 	} else if (strcmp(func_name, "setmfact") == 0) {
 		func = set_master_factor;

@@ -34,10 +34,8 @@ uint32_t want_restore_fullscreen(Client *target_client) {
 	wl_list_for_each(c, &server.clients, link) {
 		if (c && c != target_client && c->tags == target_client->tags &&
 			c == server.selected_monitor->sel && c->mon &&
-			c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id !=
-				SCROLLER &&
-			c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id !=
-				VERTICAL_SCROLLER) {
+			!is_scroller_layout_id(
+				c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id)) {
 			return 0;
 		}
 	}

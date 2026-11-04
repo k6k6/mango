@@ -161,6 +161,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 				value);
 			return false;
 		}
+	} else if (strcmp(key, "default_scroller_master_count") == 0) {
+		config->default_scroller_master_count = atoi(value);
 	} else if (strcmp(key, "scroller_structs") == 0) {
 		config->scroller_structs = atoi(value);
 	} else if (strcmp(key, "scroller_default_proportion") == 0) {
@@ -1267,6 +1269,7 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 		rule->monitor_model = NULL;
 		rule->monitor_serial = NULL;
 		rule->nmaster = 0;
+		rule->scroller_master_count = -1;
 		rule->mfact = 0.0f;
 		rule->no_render_border = 0;
 		rule->open_as_floating = 0;
@@ -1313,6 +1316,8 @@ bool parse_option(Config *config, char *key, char *value, int line_number) {
 					rule->no_hide = CLAMP_INT(atoi(val), 0, 1);
 				} else if (strcmp(key, "master_count") == 0) {
 					rule->nmaster = CLAMP_INT(atoi(val), 1, 99);
+				} else if (strcmp(key, "scroller_master_count") == 0) {
+					rule->scroller_master_count = CLAMP_INT(atoi(val), 0, 1000);
 				} else if (strcmp(key, "master_factor") == 0) {
 					rule->mfact = CLAMP_FLOAT(atof(val), 0.1f, 0.9f);
 				} else if (strcmp(key, "scroller_default_proportion") == 0) {
@@ -2438,6 +2443,7 @@ void set_value_default() {
 	config.special_gappoh = 20;
 	config.special_gappov = 20;
 
+	config.default_scroller_master_count = 1;
 	config.scroller_structs = 20;
 	config.scroller_default_proportion = 0.9f;
 	config.scroller_default_proportion_single = 1.0f;
@@ -2767,6 +2773,8 @@ void override_config(void) {
 		CLAMP_INT(config.edge_scroller_pointer_focus, 0, 1);
 	config.edge_scroller_focus_allow_speed =
 		CLAMP_FLOAT(config.edge_scroller_focus_allow_speed, 0.0f, 1000.0f);
+	config.default_scroller_master_count =
+		CLAMP_INT(config.default_scroller_master_count, 0, 1000);
 	config.scroller_structs = CLAMP_INT(config.scroller_structs, 0, 1000);
 	config.default_mfact = CLAMP_FLOAT(config.default_mfact, 0.1f, 0.9f);
 	config.default_nmaster = CLAMP_INT(config.default_nmaster, 1, 1000);

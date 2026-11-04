@@ -37,6 +37,21 @@ static void tab_chain_focus(Client *head) {
 			focus = it;
 	}
 
+	/* Switching tags detaches the old chain and clears its active marker.
+	 * If focus returns to a master, restore the most recently focused deck
+	 * member instead of selecting the first tab when rebuilding the chain. */
+	if (!sel && !focus && head->mon &&
+		head->mon->pertag->ltidxs[get_mon_curtag(head->mon)]->id ==
+			SCROLLER_DECK) {
+		Client *c;
+		wl_list_for_each(c, &server.focus_stack, flink) {
+			if (c->mon == head->mon && tab_head(c) == head) {
+				focus = c;
+				break;
+			}
+		}
+	}
+
 	focus = sel ? sel : (focus ? focus : head);
 
 	for (Client *it = head; it; it = it->tab_next)
@@ -54,7 +69,7 @@ static void tab_leave(Client *c) {
 static bool tab_layout_id_supported(uint32_t id) {
 	if (id == MONOCLE)
 		return config.monocle_tab_mode;
-	if (id == DECK || id == VERTICAL_DECK)
+	if (id == DECK || id == VERTICAL_DECK || id == SCROLLER_DECK)
 		return config.deck_tab_mode;
 	return false;
 }
@@ -81,7 +96,7 @@ static bool tab_is_stack_candidate(Monitor *m, Client *target) {
 	uint32_t id = m->pertag->ltidxs[get_mon_curtag(m)]->id;
 	if (id == MONOCLE)
 		return true;
-	if (id != DECK && id != VERTICAL_DECK)
+	if (id != DECK && id != VERTICAL_DECK && id != SCROLLER_DECK)
 		return false;
 	return !target->ismaster;
 }

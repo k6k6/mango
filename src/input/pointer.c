@@ -1669,7 +1669,7 @@ void pointer_place_drag_tile(Client *c) {
 			return;
 		}
 
-		if (layout->id == SCROLLER) {
+		if (layout->id == SCROLLER || layout->id == SCROLLER_DECK) {
 			scroller_drop_tile(c, closest, 0);
 			return;
 		}

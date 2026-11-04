@@ -393,6 +393,8 @@ void reapply_master(void) {
 				continue;
 			}
 			m->pertag->nmasters[i] = config.default_nmaster;
+			m->pertag->scroller_master_count[i] =
+				config.default_scroller_master_count;
 			m->pertag->mfacts[i] = config.default_mfact;
 			m->gappih = config.gappih;
 			m->gappiv = config.gappiv;
@@ -409,6 +411,8 @@ void reapply_master(void) {
 // Reset a pertag slot to defaults.
 void tag_slot_set_defaults(Monitor *m, uint32_t tag) {
 	m->pertag->nmasters[tag] = config.default_nmaster;
+	m->pertag->scroller_master_count[tag] =
+		config.default_scroller_master_count;
 	m->pertag->mfacts[tag] = config.default_mfact;
 	m->pertag->config_ltidxs[tag] = &layouts[0];
 	m->pertag->scroller_default_proportion[tag] =
@@ -452,6 +456,8 @@ void tag_rule_apply_to_slot(Monitor *m, const ConfigTagRule *tr, uint32_t tag) {
 		m->pertag->no_hide[tag] = tr->no_hide;
 	if (tr->nmaster >= 1)
 		m->pertag->nmasters[tag] = tr->nmaster;
+	if (tr->scroller_master_count >= 0)
+		m->pertag->scroller_master_count[tag] = tr->scroller_master_count;
 	if (tr->mfact > 0.0f)
 		m->pertag->mfacts[tag] = tr->mfact;
 	if (tr->no_render_border >= 0)

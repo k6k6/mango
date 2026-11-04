@@ -543,6 +543,40 @@ int32_t focus_stack(const Arg *arg) {
 	return 0;
 }
 
+int32_t focus_deck(const Arg *arg) {
+	if (!arg || !server.selected_monitor)
+		return 0;
+
+	Client *sel = arg->tc ? arg->tc : client_focus_top(server.selected_monitor);
+	if (!sel || !sel->mon)
+		return 0;
+
+	Monitor *m = sel->mon;
+	if (m->isoverview ||
+		m->pertag->ltidxs[get_mon_curtag(m)]->id != SCROLLER_DECK ||
+		!VISIBLEON(sel, m) || !ISSCROLLTILED(sel) || sel->ismaster)
+		return 0;
+
+	/* Use layout membership, not tab links: deck_tab_mode=0 has no tab chain.
+	 * Start at sel so both directions wrap without ever leaving the deck.
+	 */
+	bool reverse = arg->i != NEXT;
+	for (struct wl_list *link = reverse ? sel->link.prev : sel->link.next;
+		 link != &sel->link; link = reverse ? link->prev : link->next) {
+		if (link == &server.clients)
+			continue;
+		Client *tc = wl_container_of(link, tc, link);
+		if (!VISIBLEON(tc, m) || !ISSCROLLTILED(tc) || tc->ismaster)
+			continue;
+
+		client_focus(tc, 1);
+		if (config.warpcursor)
+			pointer_warp_to_client(tc);
+		break;
+	}
+	return 0;
+}
+
 /*
  * overcircle: opens/cycles overview (centered tab layout)
  * - not in overview: enters overview
@@ -617,6 +651,28 @@ int32_t inc_nmaster(const Arg *arg) {
 		MANGO_MAX(server.selected_monitor->pertag->nmasters[tag] + arg->i, 0);
 	arrange(server.selected_monitor, false, false);
 	return 0;
+}
+
+static int32_t update_scroller_master_count(const Arg *arg, bool relative) {
+	Monitor *m = server.selected_monitor;
+	if (!arg || !m)
+		return 0;
+	uint32_t tag = get_mon_curtag(m);
+	int64_t count = arg->i;
+	if (relative)
+		count += m->pertag->scroller_master_count[tag];
+	m->pertag->scroller_master_count[tag] =
+		MANGO_MAX(0, MANGO_MIN(count, 1000));
+	arrange(m, false, false);
+	return 0;
+}
+
+int32_t inc_scroller_master_count(const Arg *arg) {
+	return update_scroller_master_count(arg, true);
+}
+
+int32_t set_scroller_master_count(const Arg *arg) {
+	return update_scroller_master_count(arg, false);
 }
 
 int32_t increase_gaps(const Arg *arg) {
@@ -1002,16 +1058,7 @@ int32_t set_proportion(const Arg *arg) {
 		return 0;
 
 	Monitor *m = tc->mon;
-	uint32_t tag = get_mon_curtag(m);
-	struct TagScrollerState *st = m->pertag->scroller_state[tag];
-	struct ScrollerStackNode *node = NULL;
-
-	if (st)
-		node = find_scroller_node(st, tc);
-
-	if (node)
-		node->scroller_proportion = arg->f;
-	tc->scroller_proportion = arg->f;
+	scroller_set_proportion(tc, arg->f);
 
 	uint32_t max_client_width =
 		m->w.width - 2 * config.scroller_structs - config.gappih;
@@ -1050,15 +1097,7 @@ int32_t switch_proportion_preset(const Arg *arg) {
 		return 0;
 
 	Monitor *m = tc->mon;
-	uint32_t tag = get_mon_curtag(m);
-	struct TagScrollerState *st = m->pertag->scroller_state[tag];
-	struct ScrollerStackNode *node = NULL;
-
-	if (st)
-		node = find_scroller_node(st, tc);
-
-	float current_proportion =
-		node ? node->scroller_proportion : tc->scroller_proportion;
+	float current_proportion = scroller_get_proportion(tc);
 
 	for (int32_t i = 0; i < config.scroller_proportion_preset_count; i++) {
 		if (config.scroller_proportion_preset[i] == current_proportion) {
@@ -1073,9 +1112,7 @@ int32_t switch_proportion_preset(const Arg *arg) {
 	if (target_proportion == 0.0f)
 		target_proportion = config.scroller_proportion_preset[0];
 
-	if (node)
-		node->scroller_proportion = target_proportion;
-	tc->scroller_proportion = target_proportion;
+	scroller_set_proportion(tc, target_proportion);
 
 	uint32_t max_client_width =
 		m->w.width - 2 * config.scroller_structs - config.gappih;
@@ -2601,7 +2638,10 @@ void scroller_apply_stack(Client *c, Client *target_client, int32_t direction) {
 	Monitor *m = c->mon;
 	uint32_t tag = get_client_tag_idx(c);
 
-	bool is_horizontal = (m->pertag->ltidxs[tag]->id == SCROLLER);
+	uint32_t layout_id = m->pertag->ltidxs[tag]->id;
+	if (layout_id == SCROLLER_DECK && !c->ismaster)
+		return;
+	bool is_horizontal = layout_id == SCROLLER || layout_id == SCROLLER_DECK;
 
 	if (is_horizontal && (direction == UP || direction == DOWN))
 		return;
@@ -2649,7 +2689,8 @@ void scroller_apply_stack(Client *c, Client *target_client, int32_t direction) {
 		return;
 	}
 
-	if (!tnode || target_client->mon != c->mon)
+	if (!tnode || target_client->mon != c->mon ||
+		(layout_id == SCROLLER_DECK && !target_client->ismaster))
 		return;
 
 	struct ScrollerStackNode *tail = tnode;

@@ -122,13 +122,7 @@ Monitor *monitor_from_cycle(int32_t dir) {
 }
 
 bool is_scroller_layout(Monitor *m) {
-	if (m->pertag->ltidxs[get_mon_curtag(m)]->id == SCROLLER)
-		return true;
-
-	if (m->pertag->ltidxs[get_mon_curtag(m)]->id == VERTICAL_SCROLLER)
-		return true;
-
-	return false;
+	return m && is_scroller_layout_id(m->pertag->ltidxs[get_mon_curtag(m)]->id);
 }
 
 bool is_monocle_layout(Monitor *m) {
@@ -228,6 +222,8 @@ void monitor_copy_tag_layout(Monitor *target, const Monitor *source,
 	const Pertag *src = source->pertag;
 
 	dst->nmasters[tag] = src->nmasters[tag];
+	dst->scroller_master_count[tag] = src->scroller_master_count[tag];
+	dst->scroller_deck_proportion[tag] = src->scroller_deck_proportion[tag];
 	dst->mfacts[tag] = src->mfacts[tag];
 	dst->no_hide[tag] = src->no_hide[tag];
 	dst->no_render_border[tag] = src->no_render_border[tag];
@@ -857,6 +853,8 @@ void handle_new_output(struct wl_listener *listener, void *data) {
 
 	for (i = 0; i <= config.tag_num; i++) {
 		m->pertag->nmasters[i] = config.default_nmaster;
+		m->pertag->scroller_master_count[i] =
+			config.default_scroller_master_count;
 		m->pertag->mfacts[i] = config.default_mfact;
 		m->pertag->ltidxs[i] = &layouts[0];
 	}

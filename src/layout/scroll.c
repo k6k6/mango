@@ -230,6 +230,17 @@ static void scroller_normalize_stack_weights(struct ScrollerStackNode *head) {
 void scroller_arrange_stack_node(struct ScrollerStackNode *head,
 								 struct wlr_box geometry, int32_t gappiv,
 								 const LayoutContext *ctx) {
+	if (head &&
+		head->client->mon->pertag->ltidxs[get_mon_curtag(head->client->mon)]
+				->id == SCROLLER_DECK &&
+		!head->client->ismaster) {
+		for (struct ScrollerStackNode *it = head; it; it = it->next_in_stack) {
+			client_tile_resize(it->client, geometry, 0, ctx);
+			if (!ctx)
+				client_update_visibility(it->client);
+		}
+		return;
+	}
 	int32_t stack_size = 0;
 	struct ScrollerStackNode *iter = head;
 	while (iter) {
@@ -302,9 +313,9 @@ void scroller_arrange_stack_vertical_node(struct ScrollerStackNode *head,
 	}
 }
 
-static void scroller_core(Monitor *m, const LayoutContext *ctx) {
+static void scroller_core_state(Monitor *m, const LayoutContext *ctx,
+								struct TagScrollerState *st) {
 	uint32_t tag = get_mon_curtag(m);
-	struct TagScrollerState *st = ensure_scroller_state(m, tag);
 	Client *c = NULL;
 	float scroller_default_proportion_single =
 		m->pertag->scroller_default_proportion_single[tag];
@@ -457,7 +468,7 @@ static void scroller_core(Monitor *m, const LayoutContext *ctx) {
 		(config.scroller_prefer_center && !need_apply_overspread &&
 		 (!m->prevsel ||
 		  (ISSCROLLTILED(m->prevsel) &&
-		   (m->prevsel->scroller_proportion * max_client_width) +
+		   (scroller_get_proportion(m->prevsel) * max_client_width) +
 				   (heads[focus_index]->scroller_proportion *
 					max_client_width) >
 			   m->w.width - 2 * config.scroller_structs - cur_gappih)));
@@ -548,6 +559,118 @@ static void scroller_core(Monitor *m, const LayoutContext *ctx) {
 
 	sync_scroller_state_to_clients(m, tag);
 	free(heads);
+}
+
+/* Build a layout-only view. Automatic tabs must never overwrite the manual
+ * scroller stack links, including stacks that cross the master/deck boundary.
+ */
+static struct ScrollerStackNode *
+scroller_deck_build_view(Monitor *m, struct TagScrollerState *source,
+						 struct TagScrollerState *view) {
+	struct ScrollerStackNode *nodes =
+		calloc(source->count ? source->count : 1, sizeof(*nodes));
+	if (!nodes)
+		return NULL;
+
+	Client *c;
+	struct ScrollerStackNode *tail = NULL;
+	wl_list_for_each(c, &server.clients, link) {
+		if (!VISIBLEON(c, m) || !ISSCROLLTILED(c))
+			continue;
+		struct ScrollerStackNode *original = find_scroller_node(source, c);
+		if (!original)
+			continue;
+		struct ScrollerStackNode *node = &nodes[view->count++];
+		*node = *original;
+		node->prev_in_stack = node->next_in_stack = node->all_next = NULL;
+		if (tail)
+			tail->all_next = node;
+		else
+			view->all_first = node;
+		tail = node;
+	}
+
+	uint32_t tag = get_mon_curtag(m);
+	struct ScrollerStackNode *deck_head = NULL, *deck_tail = NULL;
+	for (struct ScrollerStackNode *node = view->all_first; node;
+		 node = node->all_next) {
+		if (node->client->ismaster) {
+			struct ScrollerStackNode *original =
+				find_scroller_node(source, node->client);
+			if (original->prev_in_stack &&
+				original->prev_in_stack->client->ismaster)
+				node->prev_in_stack =
+					find_scroller_node(view, original->prev_in_stack->client);
+			if (original->next_in_stack &&
+				original->next_in_stack->client->ismaster)
+				node->next_in_stack =
+					find_scroller_node(view, original->next_in_stack->client);
+			continue;
+		}
+		if (!deck_head) {
+			deck_head = node;
+			if (m->pertag->scroller_deck_proportion[tag] <= 0.0f)
+				m->pertag->scroller_deck_proportion[tag] =
+					node->scroller_proportion;
+		}
+		node->scroller_proportion = m->pertag->scroller_deck_proportion[tag];
+		node->scroller_proportion_single =
+			deck_head->scroller_proportion_single;
+		node->prev_in_stack = deck_tail;
+		if (deck_tail)
+			deck_tail->next_in_stack = node;
+		deck_tail = node;
+	}
+
+	/* Use the selected/last-focused tab as the column anchor. Fullscreen and
+	 * maximize therefore apply to the active tab, and switching tabs keeps x.
+	 */
+	struct ScrollerStackNode *focus = NULL;
+	if (m->sel && !m->sel->ismaster)
+		focus = find_scroller_node(view, m->sel);
+	if (!focus) {
+		wl_list_for_each(c, &server.focus_stack, flink) {
+			if (!c->ismaster && (focus = find_scroller_node(view, c)))
+				break;
+		}
+	}
+	if (focus && focus != deck_head && deck_head) {
+		if (focus->prev_in_stack)
+			focus->prev_in_stack->next_in_stack = focus->next_in_stack;
+		if (focus->next_in_stack)
+			focus->next_in_stack->prev_in_stack = focus->prev_in_stack;
+		focus->prev_in_stack = NULL;
+		focus->next_in_stack = deck_head;
+		deck_head->prev_in_stack = focus;
+	}
+	return nodes;
+}
+
+static void scroller_core(Monitor *m, const LayoutContext *ctx) {
+	uint32_t tag = get_mon_curtag(m);
+	struct TagScrollerState *st = ensure_scroller_state(m, tag);
+	if (m->pertag->ltidxs[tag]->id != SCROLLER_DECK) {
+		scroller_core_state(m, ctx, st);
+		return;
+	}
+
+	struct TagScrollerState view = {0};
+	struct ScrollerStackNode *nodes = scroller_deck_build_view(m, st, &view);
+	if (!nodes)
+		return;
+	scroller_core_state(m, ctx, &view);
+	if (!ctx) {
+		for (struct ScrollerStackNode *n = view.all_first; n; n = n->all_next) {
+			if (!n->client->ismaster)
+				continue;
+			struct ScrollerStackNode *original =
+				find_scroller_node(st, n->client);
+			original->scroller_stack_proportion = n->scroller_stack_proportion;
+			original->scroller_stack_weight = n->scroller_stack_weight;
+		}
+		sync_scroller_state_to_clients(m, tag);
+	}
+	free(nodes);
 }
 
 static void vertical_scroller_core(Monitor *m, const LayoutContext *ctx) {
@@ -820,7 +943,10 @@ void scroller_remove_client(Client *c) {
 
 void scroller_insert_stack(Client *c, Client *target_client,
 						   bool insert_before) {
-	if (!target_client || target_client->mon != c->mon)
+	if (!target_client || target_client == c || target_client->mon != c->mon)
+		return;
+	if (c->mon->pertag->ltidxs[get_mon_curtag(c->mon)]->id == SCROLLER_DECK &&
+		(!c->ismaster || !target_client->ismaster))
 		return;
 
 	if (c->isfullscreen)
@@ -876,6 +1002,18 @@ void scroller_insert_stack(Client *c, Client *target_client,
 
 void scroller_drop_tile(Client *c, Client *closest, int vertical) {
 
+	if (closest->mon->pertag->ltidxs[get_mon_curtag(closest->mon)]->id ==
+			SCROLLER_DECK &&
+		(!c->ismaster || !closest->ismaster)) {
+		client_set_floating(c, 0, false);
+		if (closest->drop_direction == LEFT || closest->drop_direction == UP)
+			wl_list_safe_reinsert_prev(&closest->link, &c->link);
+		else
+			wl_list_safe_reinsert_next(&closest->link, &c->link);
+		arrange(closest->mon, false, false);
+		return;
+	}
+
 	// Must update first; otherwise nodes inside still hold cnode info and
 	// stack_head/stack_tail would point at the wrong clients.
 	update_scroller_state(c->mon);
@@ -928,11 +1066,22 @@ Client *scroll_get_stack_head_client(Client *c) {
 	if (!c || !c->mon)
 		return c;
 	uint32_t tag = get_client_tag_idx(c);
+	if (c->mon->pertag->ltidxs[tag]->id == SCROLLER_DECK && ISSCROLLTILED(c) &&
+		!c->ismaster) {
+		Client *it;
+		wl_list_for_each(it, &server.clients, link) {
+			if (VISIBLEON(it, c->mon) && ISSCROLLTILED(it) && !it->ismaster)
+				return it;
+		}
+		return c;
+	}
 	struct TagScrollerState *st = c->mon->pertag->scroller_state[tag];
 	if (st) {
 		struct ScrollerStackNode *n = find_scroller_node(st, c);
 		if (n) {
-			while (n->prev_in_stack)
+			while (n->prev_in_stack &&
+				   (c->mon->pertag->ltidxs[tag]->id != SCROLLER_DECK ||
+					n->prev_in_stack->client->ismaster))
 				n = n->prev_in_stack;
 			return n->client;
 		}
@@ -944,11 +1093,22 @@ Client *scroll_get_stack_tail_client(Client *c) {
 	if (!c || !c->mon)
 		return c;
 	uint32_t tag = get_client_tag_idx(c);
+	if (c->mon->pertag->ltidxs[tag]->id == SCROLLER_DECK && ISSCROLLTILED(c) &&
+		!c->ismaster) {
+		Client *it;
+		wl_list_for_each_reverse(it, &server.clients, link) {
+			if (VISIBLEON(it, c->mon) && ISSCROLLTILED(it) && !it->ismaster)
+				return it;
+		}
+		return c;
+	}
 	struct TagScrollerState *st = c->mon->pertag->scroller_state[tag];
 	if (st) {
 		struct ScrollerStackNode *n = find_scroller_node(st, c);
 		if (n) {
-			while (n->next_in_stack)
+			while (n->next_in_stack &&
+				   (c->mon->pertag->ltidxs[tag]->id != SCROLLER_DECK ||
+					n->next_in_stack->client->ismaster))
 				n = n->next_in_stack;
 			return n->client;
 		}
@@ -1145,6 +1305,42 @@ void exchange_two_scroller_clients(Client *c1, Client *c2) {
 	finish_exchange_arrange_and_focus(c1, c2, m1, m2);
 
 	return;
+}
+
+float scroller_get_proportion(Client *c) {
+	if (!c || !c->mon)
+		return c ? c->scroller_proportion : 0.0f;
+	uint32_t tag = get_client_tag_idx(c);
+	if (c->mon->pertag->ltidxs[tag]->id == SCROLLER_DECK && ISSCROLLTILED(c) &&
+		!c->ismaster && c->mon->pertag->scroller_deck_proportion[tag] > 0.0f)
+		return c->mon->pertag->scroller_deck_proportion[tag];
+	c = scroll_get_stack_head_client(c);
+	struct ScrollerStackNode *node =
+		find_scroller_node(c->mon->pertag->scroller_state[tag], c);
+	return node ? node->scroller_proportion : c->scroller_proportion;
+}
+
+void scroller_set_proportion(Client *c, float proportion) {
+	if (!c || !c->mon)
+		return;
+	uint32_t tag = get_client_tag_idx(c);
+	if (c->mon->pertag->ltidxs[tag]->id == SCROLLER_DECK && ISSCROLLTILED(c) &&
+		!c->ismaster) {
+		c->mon->pertag->scroller_deck_proportion[tag] = proportion;
+		return;
+	}
+	c = scroll_get_stack_head_client(c);
+	struct ScrollerStackNode *node =
+		find_scroller_node(c->mon->pertag->scroller_state[tag], c);
+	if (node)
+		node->scroller_proportion = proportion;
+	c->scroller_proportion = proportion;
+}
+
+void scroller_deck(Monitor *m) { scroller_core(m, NULL); }
+
+bool scroller_deck_predict(Monitor *m, Client *c, struct wlr_box *out) {
+	return layout_predict_box(scroller_core, m, c, out);
 }
 
 void scroller(Monitor *m) { scroller_core(m, NULL); }

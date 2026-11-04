@@ -201,6 +201,7 @@ typedef struct {
 	char *monitor_serial;
 	float mfact;
 	int32_t nmaster;
+	int32_t scroller_master_count;
 	float scroller_default_proportion;
 	float scroller_default_proportion_single;
 	int32_t scroller_ignore_proportion_single;
@@ -332,6 +333,7 @@ typedef struct {
 	double animation_curve_opafadein[4];
 	double animation_curve_opafadeout[4];
 
+	int32_t default_scroller_master_count;
 	int32_t scroller_structs;
 	float scroller_default_proportion;
 	float scroller_default_proportion_single;

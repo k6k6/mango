@@ -1112,6 +1112,10 @@ Client *find_client_by_direction(Client *tc, const Arg *arg,
 				continue;
 			if (c->isunglobal)
 				continue;
+			if (!c->mon->isoverview && c->is_tab_hidden &&
+				c->mon->pertag->ltidxs[get_mon_curtag(c->mon)]->id ==
+					SCROLLER_DECK)
+				continue;
 			if (!config.focus_cross_monitor && c->mon != tc->mon)
 				continue;
 			if (!(c->tags & c->mon->tagset[c->mon->seltags]) && !c->isglobal)
@@ -1348,8 +1352,7 @@ bool client_is_in_same_stack(Client *sc, Client *tc, Client *fc) {
 
 	uint32_t id = sc->mon->pertag->ltidxs[get_client_tag_idx(sc)]->id;
 
-	if ((id != SCROLLER && id != VERTICAL_SCROLLER) &&
-		tc->mon != server.selected_monitor &&
+	if (!is_scroller_layout_id(id) && tc->mon != server.selected_monitor &&
 		(tc->isfullscreen || tc->ismaximizescreen))
 		return true;
 
@@ -1357,7 +1360,16 @@ bool client_is_in_same_stack(Client *sc, Client *tc, Client *fc) {
 		return !tc->is_tab_hidden;
 	}
 
-	if (id == SCROLLER || id == VERTICAL_SCROLLER) {
+	if (id == SCROLLER_DECK) {
+		if (sc->mon != tc->mon)
+			return false;
+		if (!sc->ismaster && !tc->ismaster)
+			return !tc->is_tab_hidden;
+		if (sc->ismaster != tc->ismaster)
+			return false;
+	}
+
+	if (is_scroller_layout_id(id)) {
 		Client *source_stack_head = scroll_get_stack_head_client(sc);
 		Client *target_stack_head = scroll_get_stack_head_client(tc);
 		Client *fc_head = fc ? scroll_get_stack_head_client(fc) : NULL;
@@ -2235,8 +2247,11 @@ static void client_insert_tiling_order(Client *c) {
 		if (server.selected_monitor->sel &&
 			ISSCROLLTILED(server.selected_monitor->sel) &&
 			VISIBLEON(server.selected_monitor->sel, server.selected_monitor)) {
-			at_client =
-				scroll_get_stack_tail_client(server.selected_monitor->sel);
+			at_client = server.selected_monitor->sel;
+			if (server.selected_monitor->pertag
+					->ltidxs[get_mon_curtag(server.selected_monitor)]
+					->id != SCROLLER_DECK)
+				at_client = scroll_get_stack_tail_client(at_client);
 		} else {
 			at_client = center_tiled_select(server.selected_monitor);
 		}
@@ -2550,12 +2565,44 @@ void handle_client_commit(struct wl_listener *listener, void *data) {
 	c->dirty = client_xdg_size_pending(c);
 }
 
+static Client *scroller_deck_focus_after_close(Client *c) {
+	Monitor *m = c->mon;
+	if (!m || m != server.selected_monitor || c != m->sel || m->isoverview ||
+		m->pertag->ltidxs[get_mon_curtag(m)]->id != SCROLLER_DECK ||
+		!VISIBLEON(c, m) || !ISSCROLLTILED(c) || c->ismaster || c->swallowing ||
+		client_is_group_member(c))
+		return NULL;
+
+	/* Capture the nearest deck neighbor in tab order before unmap changes
+	 * membership. At the left edge, use the right neighbor without wrapping.
+	 * Tab links may be absent when deck_tab_mode=0; manual stack links can
+	 * still describe the saved Scroller splits instead of the deck.
+	 */
+	Client *it, *left = NULL;
+	bool after = false;
+	wl_list_for_each(it, &server.clients, link) {
+		if (it == c) {
+			if (left)
+				return left;
+			after = true;
+			continue;
+		}
+		if (!VISIBLEON(it, m) || !ISSCROLLTILED(it) || it->ismaster ||
+			it->no_focus || !client_surface(it)->mapped)
+			continue;
+		if (after)
+			return it;
+		left = it;
+	}
+	return NULL;
+}
+
 void handle_client_unmap(struct wl_listener *listener, void *data) {
 	/* Called when the surface is unmapped, and should no longer be shown.
 	 */
 	Client *c = wl_container_of(listener, c, unmap);
 	Monitor *m = NULL;
-	Client *nextfocus = NULL;
+	Client *nextfocus = scroller_deck_focus_after_close(c);
 	c->iskilling = 1;
 	if (c->tab_prev || c->tab_next)
 		tab_detach_client(c);
@@ -2615,12 +2662,14 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 	}
 
 	if (c->mon && c->mon == server.selected_monitor) {
-		if (next_node && !c->swallowing) {
-			nextfocus = next_node->client;
-		} else if (prev_node && !c->swallowing) {
-			nextfocus = prev_node->client;
-		} else {
-			nextfocus = client_focus_top(server.selected_monitor);
+		if (!nextfocus) {
+			if (next_node && !c->swallowing) {
+				nextfocus = next_node->client;
+			} else if (prev_node && !c->swallowing) {
+				nextfocus = prev_node->client;
+			} else {
+				nextfocus = client_focus_top(server.selected_monitor);
+			}
 		}
 
 		if (nextfocus && !VISIBLEON(nextfocus, server.selected_monitor)) {
@@ -3711,7 +3760,7 @@ void clear_fullscreen_and_maximized_state(Monitor *m) {
 void clear_fullscreen_flag(Client *c) {
 	uint32_t id = c->mon->pertag->ltidxs[get_client_tag_idx(c)]->id;
 
-	if (!c->isfloating && (id == SCROLLER || id == VERTICAL_SCROLLER ||
+	if (!c->isfloating && (is_scroller_layout_id(id) ||
 						   (id == MONOCLE && config.monocle_tab_mode))) {
 		return;
 	}
@@ -4015,8 +4064,7 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 
 	const Layout *layout = w->mon->pertag->ltidxs[get_client_tag_idx(w)];
 
-	if (layout->id == DWINDLE || layout->id == SCROLLER ||
-		layout->id == VERTICAL_SCROLLER) {
+	if (layout->id == DWINDLE || is_scroller_layout_id(layout->id)) {
 
 		for (uint32_t t = 0; t < PERTAG_SLOTS; t++) {
 			/* dwindle */
@@ -4031,7 +4079,7 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 			}
 
 			// scroller
-			if (layout->id == SCROLLER || layout->id == VERTICAL_SCROLLER) {
+			if (is_scroller_layout_id(layout->id)) {
 				struct TagScrollerState *st = w->mon->pertag->scroller_state[t];
 				if (!st)
 					continue;
@@ -4047,7 +4095,7 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 	}
 
 	/* Syncs the global client fields of the currently active tag. */
-	if (layout->id == SCROLLER || layout->id == VERTICAL_SCROLLER) {
+	if (is_scroller_layout_id(layout->id)) {
 		sync_scroller_state_to_clients(w->mon, get_client_tag_idx(w));
 	}
 
@@ -4130,7 +4178,7 @@ void client_move_to_monitor(Client *c, Client *target, int32_t dir) {
 
 	client_reassign_monitor(c, dst_mon);
 
-	if (layout->id == SCROLLER || layout->id == VERTICAL_SCROLLER) {
+	if (is_scroller_layout_id(layout->id)) {
 		bool along_axis = (layout->id == VERTICAL_SCROLLER)
 							  ? (dir == UP || dir == DOWN)
 							  : (dir == LEFT || dir == RIGHT);

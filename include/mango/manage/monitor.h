@@ -102,6 +102,8 @@ struct Monitor {
 struct Pertag {
 	uint32_t curtag, prevtag;
 	int32_t nmasters[PERTAG_SLOTS];
+	int32_t scroller_master_count[PERTAG_SLOTS];
+	float scroller_deck_proportion[PERTAG_SLOTS];
 	float mfacts[PERTAG_SLOTS];
 	int32_t no_hide[PERTAG_SLOTS];
 	int32_t no_render_border[PERTAG_SLOTS];

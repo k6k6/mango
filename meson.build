@@ -68,7 +68,7 @@ endif
 # define compilation args
 c_args = [
   '-g',
-  '-O2',
+  # '-O2',
   '-U_FORTIFY_SOURCE',
   '-Wno-unused-function',
   '-Wno-unused-parameter',
@@ -168,7 +168,7 @@ executable('mmsg',
 
   c_args: [
     '-g',
-    '-O2',
+    # '-O2',
     '-U_FORTIFY_SOURCE',
     '-Wno-unused-function',
     '-Wno-unused-parameter',
@@ -221,7 +221,7 @@ executable('mangonag',
 
   c_args: [
     '-g',
-    '-O2',
+    # '-O2',
     '-U_FORTIFY_SOURCE',
     '-Wno-unused-function',
     '-Wno-unused-parameter',

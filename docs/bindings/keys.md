@@ -122,7 +122,8 @@ bindr=Super,Super_L,spawn,rofi -show run
 | `focusid` | - | Focus window (can target any window via IPC: `mmsg dispatch focusid client,<id>`) |
 | `focusdir` | `left/right/up/down` | Focus window in direction. |
 | `focus_window_or_workspace` | `left/right/up/down` | Focus window in direction; otherwise jump to the nearest adjacent tag that has clients, falling back to the next/previous tag if none. |
-| `focusstack` | `next/prev` | Cycle focus within the stack. |
+| `focusstack` | `next/prev` | Cycle focus through visible windows in window order, including both master and deck windows. |
+| `focusdeck` | `next/prev` | In `scroller-deck`, cycle within the deck in window order, wrapping at both ends. No-op outside the deck or in overview; works with `deck_tab_mode=0` too. |
 | `overcircle` | `next/prev/current_next/current_prev` | Open overview when closed; while it is open, cycle focus to the next/previous window on the current monitor. `current_next`/`current_prev` only show the current tagset's windows in the overview instead of all tags. |
 | `focuslast` | - | Focus the previously active window. |
 | `switcher` | `next/prev`, `all_tag_next/all_tag_prev`, `all_next/all_prev` | Open or cycle the thumbnail switcher. `next`/`prev` list the current tag's windows, `all_tag_next`/`all_tag_prev` list all tags on the current monitor, `all_next`/`all_prev` list all monitors and tags. Releasing any modifier key selects. |
@@ -175,6 +176,8 @@ It is formed by tag numbers `1`–`9`, optionally combined with `|`.
 | `setlayout` | `name` | Switch to layout (e.g., `scroller`, `tile`). |
 | `switch_layout` | - | Cycle through available layouts. |
 | `incnmaster` | `+1/-1` | Increase/Decrease number of master windows. |
+| `inc_scroller_master_count` | `+1/-1` | Adjust the number of independent windows in `scroller-deck` for the current monitor and tag (clamped to `0`–`1000`). |
+| `set_scroller_master_count` | `N` | Set the number of independent windows in `scroller-deck` for the current monitor and tag (clamped to `0`–`1000`). |
 | `setmfact` | `+0.05` | Increase/Decrease master area size. |
 | `set_proportion` | `float` | Set scroller window proportion (0.0–1.0). |
 | `switch_proportion_preset` | - | Cycle proportion presets of scroller window. |

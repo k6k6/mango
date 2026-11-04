@@ -807,6 +807,32 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 
 	Monitor *m = gc->mon;
 	uint32_t tag = get_client_tag_idx(gc);
+	bool deck = m->pertag->ltidxs[tag]->id == SCROLLER_DECK;
+	if (deck && !gc->ismaster) {
+		if (!server.start_drag_window && isdrag) {
+			server.drag_begin_cursor_x = server.cursor->x;
+			server.drag_begin_cursor_y = server.cursor->y;
+			server.start_drag_window = true;
+			gc->old_scroller_pproportion = scroller_get_proportion(gc);
+			gc->drag_begin_geom = gc->geom;
+			gc->cursor_in_left_half =
+				server.cursor->x < gc->geom.x + gc->geom.width / 2;
+			return;
+		}
+		if (isdrag) {
+			offsetx = server.cursor->x - server.drag_begin_cursor_x;
+			if (gc->cursor_in_left_half)
+				offsetx = -offsetx;
+		} else {
+			gc->old_scroller_pproportion = scroller_get_proportion(gc);
+			gc->drag_begin_geom = gc->geom;
+		}
+		float proportion = gc->old_scroller_pproportion *
+						   (1.0f + (float)offsetx / gc->drag_begin_geom.width);
+		scroller_set_proportion(gc, CLAMP_FLOAT(proportion, 0.1f, 1.0f));
+		arrange(m, false, false);
+		return;
+	}
 	struct TagScrollerState *st = m->pertag->scroller_state[tag];
 	if (!st)
 		return;
@@ -815,9 +841,16 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 	if (!curnode)
 		return;
 
-	struct ScrollerStackNode *headnode = curnode;
-	while (headnode->prev_in_stack)
-		headnode = headnode->prev_in_stack;
+	struct ScrollerStackNode *headnode =
+		find_scroller_node(st, scroll_get_stack_head_client(gc));
+	struct ScrollerStackNode *nextnode = curnode->next_in_stack;
+	struct ScrollerStackNode *prevnode = curnode->prev_in_stack;
+	if (deck) {
+		if (nextnode && !nextnode->client->ismaster)
+			nextnode = NULL;
+		if (prevnode && !prevnode->client->ismaster)
+			prevnode = NULL;
+	}
 
 	Client *stack_head_client = headnode->client;
 
@@ -898,16 +931,16 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 		}
 
 		if (isvertical) {
-			if (!curnode->next_in_stack && curnode->prev_in_stack && !isdrag) {
+			if (!nextnode && prevnode && !isdrag) {
 				delta_x = delta_x * -1.0f;
 			}
-			if (!curnode->next_in_stack && curnode->prev_in_stack && isdrag) {
+			if (!nextnode && prevnode && isdrag) {
 				if (moving_right)
 					delta_x = -fabsf(delta_x);
 				else
 					delta_x = fabsf(delta_x);
 			}
-			if (!curnode->prev_in_stack && curnode->next_in_stack && isdrag) {
+			if (!prevnode && nextnode && isdrag) {
 				if (moving_left)
 					delta_x = -fabsf(delta_x);
 				else
@@ -920,16 +953,16 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 					delta_y = fabsf(delta_y);
 			}
 		} else {
-			if (!curnode->next_in_stack && curnode->prev_in_stack && !isdrag) {
+			if (!nextnode && prevnode && !isdrag) {
 				delta_y = delta_y * -1.0f;
 			}
-			if (!curnode->next_in_stack && curnode->prev_in_stack && isdrag) {
+			if (!nextnode && prevnode && isdrag) {
 				if (moving_down)
 					delta_y = -fabsf(delta_y);
 				else
 					delta_y = fabsf(delta_y);
 			}
-			if (!curnode->prev_in_stack && curnode->next_in_stack && isdrag) {
+			if (!prevnode && nextnode && isdrag) {
 				if (moving_up)
 					delta_y = -fabsf(delta_y);
 				else
@@ -964,7 +997,8 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 			float new_other_sum = 1.0f - new_stack_proportion;
 			if (current_other_sum > 0.001f) {
 				float scale = new_other_sum / current_other_sum;
-				for (struct ScrollerStackNode *tc = headnode; tc;
+				for (struct ScrollerStackNode *tc = headnode;
+					 tc && (!deck || tc->client->ismaster);
 					 tc = tc->next_in_stack) {
 					if (tc != curnode) {
 						tc->scroller_stack_proportion *= scale;
@@ -974,7 +1008,8 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 		} else {
 			// Keyboard stepping.
 			if (gc->scroller_old_stack_proportion != 1.0f) {
-				for (struct ScrollerStackNode *tc = headnode; tc;
+				for (struct ScrollerStackNode *tc = headnode;
+					 tc && (!deck || tc->client->ismaster);
 					 tc = tc->next_in_stack) {
 					if (tc != curnode) {
 						tc->scroller_stack_proportion =
@@ -993,7 +1028,8 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 			headnode->scroller_proportion = new_scroller_proportion;
 		}
 
-		for (struct ScrollerStackNode *stnode = headnode; stnode;
+		for (struct ScrollerStackNode *stnode = headnode;
+			 stnode && (!deck || stnode->client->ismaster);
 			 stnode = stnode->next_in_stack) {
 			stnode->scroller_stack_weight = stnode->scroller_stack_proportion;
 		}
@@ -1031,7 +1067,8 @@ void resize_tile_client(Client *gc, bool isdrag, int32_t offsetx,
 			   current_layout->id == VERTICAL_DECK) {
 		resize_tile_master_vertical(gc, isdrag, offsetx, offsety,
 									current_layout->id);
-	} else if (current_layout->id == SCROLLER) {
+	} else if (current_layout->id == SCROLLER ||
+			   current_layout->id == SCROLLER_DECK) {
 		resize_tile_scroller(gc, isdrag, offsetx, offsety, false);
 	} else if (current_layout->id == VERTICAL_SCROLLER) {
 		resize_tile_scroller(gc, isdrag, offsetx, offsety, true);
@@ -1070,7 +1107,9 @@ void reset_size_per_mon(Monitor *m, double total_left_stack_weight,
 	Client *c = NULL;
 	int32_t i = 0;
 	uint32_t tag = get_mon_curtag(m);
-	uint32_t nmasters = m->pertag->nmasters[tag];
+	uint32_t nmasters = m->pertag->ltidxs[tag]->id == SCROLLER_DECK
+							? m->pertag->scroller_master_count[tag]
+							: m->pertag->nmasters[tag];
 	bool centered = m->pertag->ltidxs[tag]->id == CENTER_TILE;
 
 	wl_list_for_each(c, &server.clients, link) {
@@ -1137,8 +1176,9 @@ void pre_calculate_before_arrange(Monitor *m, bool want_animation,
 	struct TagScrollerState *st = m->pertag->scroller_state[tag];
 
 	const Layout *cur_layout = m->pertag->ltidxs[tag];
-	if (cur_layout->id == SCROLLER || cur_layout->id == VERTICAL_SCROLLER) {
+	if (is_scroller_layout_id(cur_layout->id)) {
 		update_scroller_state(m);
+		st = m->pertag->scroller_state[tag];
 	}
 
 	wl_list_for_each(c, &server.clients, link) {
@@ -1189,7 +1229,9 @@ void pre_calculate_before_arrange(Monitor *m, bool want_animation,
 		}
 	}
 
-	nmasters = m->pertag->nmasters[get_mon_curtag(m)];
+	nmasters = cur_layout->id == SCROLLER_DECK
+				   ? m->pertag->scroller_master_count[tag]
+				   : m->pertag->nmasters[tag];
 
 	wl_list_for_each(c, &server.clients, link) {
 		if (c->iskilling)
@@ -1274,6 +1316,7 @@ void tag_gather_reset_slot(Monitor *m, uint32_t tag) {
 	m->pertag->open_as_floating[tag] = 0;
 	m->pertag->dwindle_root[tag] = NULL;
 	m->pertag->scroller_state[tag] = NULL;
+	m->pertag->scroller_deck_proportion[tag] = 0.0f;
 
 	for (i = 0; i < config.tag_rules_count; i++) {
 		const ConfigTagRule *tr = &config.tag_rules[i];
@@ -1288,6 +1331,10 @@ void tag_gather_reset_slot(Monitor *m, uint32_t tag) {
 // move pertag state from src to dst, then reset src.
 void tag_gather_move_pertag(Monitor *m, uint32_t dst, uint32_t src) {
 	m->pertag->nmasters[dst] = m->pertag->nmasters[src];
+	m->pertag->scroller_master_count[dst] =
+		m->pertag->scroller_master_count[src];
+	m->pertag->scroller_deck_proportion[dst] =
+		m->pertag->scroller_deck_proportion[src];
 	m->pertag->mfacts[dst] = m->pertag->mfacts[src];
 	m->pertag->no_hide[dst] = m->pertag->no_hide[src];
 	m->pertag->no_render_border[dst] = m->pertag->no_render_border[src];
@@ -1397,6 +1444,8 @@ Layout layouts[] = {
 	{"F", fair, fair_predict, "fair", FAIR},
 	{"VF", vertical_fair, vertical_fair_predict, "vertical_fair",
 	 VERTICAL_FAIR},
+	{"SK", scroller_deck, scroller_deck_predict, "scroller-deck",
+	 SCROLLER_DECK},
 };
 
 bool special_handle_empty_view(Monitor *m, bool from_view) {

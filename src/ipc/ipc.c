@@ -133,6 +133,8 @@ cJSON *build_tags_json(Monitor *m) {
 		cJSON_AddStringToObject(tag_obj, "layout",
 								m->pertag->ltidxs[tag]->symbol);
 		cJSON_AddNumberToObject(tag_obj, "client_count", numclients);
+		cJSON_AddNumberToObject(tag_obj, "scroller_master_count",
+								m->pertag->scroller_master_count[tag]);
 		cJSON_AddItemToArray(tags_array, tag_obj);
 	}
 	return tags_array;
@@ -602,6 +604,9 @@ cJSON *build_client_json(Client *c) {
 	cJSON_AddBoolToObject(obj, "is_overlay", c->isoverlay);
 	cJSON_AddBoolToObject(obj, "is_fakefullscreen", c->isfakefullscreen);
 	cJSON_AddBoolToObject(obj, "is_minimized", c->isminimized);
+	cJSON_AddBoolToObject(obj, "is_master", c->ismaster);
+	cJSON_AddBoolToObject(obj, "is_tab_hidden", c->is_tab_hidden);
+	cJSON_AddBoolToObject(obj, "is_tab_focus", c->is_tab_focus);
 	cJSON_AddBoolToObject(obj, "is_urgent", c->isurgent);
 	cJSON_AddBoolToObject(obj, "is_scratchpad", c->is_in_scratchpad);
 	cJSON_AddBoolToObject(obj, "is_namedscratchpad", c->isnamedscratchpad);
@@ -782,6 +787,8 @@ void handle_command(int client_fd, const char *cmd_raw) {
 		resp = cJSON_CreateObject();
 		cJSON_AddStringToObject(resp, "monitor", m->wlr_output->name);
 		cJSON_AddNumberToObject(resp, "tag_index", ext_tag_idx);
+		cJSON_AddNumberToObject(resp, "scroller_master_count",
+								m->pertag->scroller_master_count[ext_tag_idx]);
 		cJSON_AddBoolToObject(resp, "is_active", is_active);
 		cJSON_AddBoolToObject(resp, "is_urgent", is_urgent);
 		cJSON_AddNumberToObject(resp, "client_count", numclients);

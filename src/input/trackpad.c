@@ -159,7 +159,7 @@ static bool swipe_layout_is_scroller(Monitor *m, bool *vertical) {
 			*vertical = true;
 		return true;
 	}
-	if (l->id == SCROLLER) {
+	if (l->id == SCROLLER || l->id == SCROLLER_DECK) {
 		if (vertical)
 			*vertical = false;
 		return true;
