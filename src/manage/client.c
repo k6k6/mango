@@ -3951,6 +3951,19 @@ void client_exchange(Client *c1, Client *c2) {
 		client_swap_monitors_and_tags(c1, c2);
 	}
 
+	if (m1 == m2 && !m1->isoverview && layout1->id == SCROLLER_DECK &&
+		VISIBLEON(c1, m1) && ISSCROLLTILED(c1) && VISIBLEON(c2, m1) &&
+		ISSCROLLTILED(c2) && c1->ismaster != c2->ismaster) {
+		Client *master = c1->ismaster ? c1 : c2;
+		Client *deck = c1->ismaster ? c2 : c1;
+		/* Hand the promoted tab's slot to the old master before arrange can
+		 * detach it and activate another tab. Keep the column anchor's focus
+		 * history in sync, including when deck_tab_mode=0 has no tab chain. */
+		tab_replace_client(deck, master);
+		tab_sync_focus(master);
+		wl_list_safe_reinsert_next(&c1->flink, &c2->flink);
+	}
+
 	finish_exchange_arrange_and_focus(c1, c2, m1, m2);
 }
 

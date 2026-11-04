@@ -89,8 +89,15 @@ default and tag rules, just like the existing master count.
 
 - `N=0` puts every tiled window in one deck.
 - `N` greater than or equal to the tiled window count leaves every window independent.
-- Increasing N extracts windows from the front of the deck. Decreasing N merges
-  the last independent windows into its front, keeping keyboard focus.
+- Increasing N with `inc_scroller_master_count` or `set_scroller_master_count`
+  promotes the active deck window to the next independent slot, preserving the
+  relative order of all other windows and keeping keyboard focus. For
+  `A B [C D E]` with E active, increasing N from 2 to 3 produces `A B E [C D]`.
+  When focus is on an independent or floating window, the most recently focused
+  eligible deck member is promoted; this also works with `deck_tab_mode=0`.
+  If N increases by more than one, the remaining slots come from the deck's front.
+  Decreasing N merges the last independent windows into the deck's front without
+  reordering them; decreasing the example back to 2 produces `A B [E C D]`.
 - Closing, minimizing, floating or moving an independent window out of the view
   lets the next eligible window take its place. Restoring a minimized window
   uses Mango's existing restore order, then recalculates membership.
@@ -113,6 +120,12 @@ default and tag rules, just like the existing master count.
   outside the deck, the deck has only one member, another layout is active, or
   overview is open. It also works with `deck_tab_mode=0`. Tabs can additionally
   be selected with the mouse.
+- `exchange_client,left/right` swaps a master and a deck member on the same
+  monitor in their window-order slots. The deck member becomes a master, and
+  the old master replaces it as the active deck member. For `A B [C D E]` with D
+  focused, exchanging left produces `A D [C B E]` with B active in the deck.
+  Keyboard focus stays on the window that initiated the exchange (D in this
+  example). This also works with `deck_tab_mode=0`.
 - `scroller_stack` can join or split windows within the first N windows. N counts
   windows, including each member of a manual split. Automatic tabs temporarily
   replace any split that crosses into the deck; switching back to `scroller`

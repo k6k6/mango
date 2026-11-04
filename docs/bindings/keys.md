@@ -127,7 +127,7 @@ bindr=Super,Super_L,spawn,rofi -show run
 | `overcircle` | `next/prev/current_next/current_prev` | Open overview when closed; while it is open, cycle focus to the next/previous window on the current monitor. `current_next`/`current_prev` only show the current tagset's windows in the overview instead of all tags. |
 | `focuslast` | - | Focus the previously active window. |
 | `switcher` | `next/prev`, `all_tag_next/all_tag_prev`, `all_next/all_prev` | Open or cycle the thumbnail switcher. `next`/`prev` list the current tag's windows, `all_tag_next`/`all_tag_prev` list all tags on the current monitor, `all_next`/`all_prev` list all monitors and tags. Releasing any modifier key selects. |
-| `exchange_client` | `left/right/up/down` | Swap the focused window with its neighbor in direction. Both windows change place, and with `exchange_cross_monitor` enabled they also swap monitors. |
+| `exchange_client` | `left/right/up/down` | Swap the focused window with its neighbor in direction. Both windows change place, and with `exchange_cross_monitor` enabled they also swap monitors. In `scroller-deck`, swapping a master with a deck member on the same monitor makes the old master the active deck member; keyboard focus stays on the initiating window. |
 | `exchange_stack_client` | `next/prev` | Exchange window position in stack. |
 | `move_client` | `left/right/up/down` | Move the focused window one step in direction. On the same monitor `dwindle` re-inserts it next to the neighbor keeping the row/column it came from, every other layout swaps it with the neighbor like `exchange_client`. When the neighbor lies on another monitor the window moves onto that monitor and is inserted in front of or behind the neighbor on the side it comes from; without a neighbor in that direction it moves onto the monitor lying there. Crossing monitors needs `exchange_cross_monitor`. |
 | `zoom` | - | Swap focused window with Master. |
@@ -176,8 +176,8 @@ It is formed by tag numbers `1`–`9`, optionally combined with `|`.
 | `setlayout` | `name` | Switch to layout (e.g., `scroller`, `tile`). |
 | `switch_layout` | - | Cycle through available layouts. |
 | `incnmaster` | `+1/-1` | Increase/Decrease number of master windows. |
-| `inc_scroller_master_count` | `+1/-1` | Adjust the number of independent windows in `scroller-deck` for the current monitor and tag (clamped to `0`–`1000`). |
-| `set_scroller_master_count` | `N` | Set the number of independent windows in `scroller-deck` for the current monitor and tag (clamped to `0`–`1000`). |
+| `inc_scroller_master_count` | `+1/-1` | Adjust the number of independent windows in `scroller-deck` for the current monitor and tag (clamped to `0`–`1000`). Increasing it promotes the active deck window first; decreasing keeps window order. |
+| `set_scroller_master_count` | `N` | Set the number of independent windows in `scroller-deck` for the current monitor and tag (clamped to `0`–`1000`), promoting the active deck window first when the count increases. |
 | `setmfact` | `+0.05` | Increase/Decrease master area size. |
 | `set_proportion` | `float` | Set scroller window proportion (0.0–1.0). |
 | `switch_proportion_preset` | - | Cycle proportion presets of scroller window. |

@@ -57,6 +57,8 @@ binds=SUPER,j,focusdeck,next
 binds=SUPER,k,focusdeck,prev
 binds=SUPER,h,focusdir,left
 binds=SUPER,l,focusdir,right
+binds=SUPER+CTRL,h,exchange_client,left
+binds=SUPER+CTRL,l,exchange_client,right
 binds=SUPER,1,view,1,0
 binds=SUPER,2,view,2,0
 binds=SUPER,q,killclient
@@ -174,7 +176,7 @@ binds=SUPER,q,killclient
         actual = self.get("focusing-client").get("title")
         assert actual == name, (command, "focus", actual, name)
 
-    def check(self, label, order, masters, deck):
+    def check(self, label, order, masters, deck, tab_mode=True):
         clients = [c for c in self.clients() if c["monitor"] == self.monitor
                    and c["tags"] == [1] and not c["is_minimized"]
                    and not c["is_floating"]]
@@ -186,8 +188,9 @@ binds=SUPER,q,killclient
         if len(tabs) >= 2:
             assert len({(c["x"], c["y"], c["width"], c["height"])
                         for c in tabs}) == 1, (label, "deck geometry", tabs)
-            assert sum(c["is_tab_focus"] for c in tabs) == 1, (label, tabs)
-            assert sum(c["is_tab_hidden"] for c in tabs) == len(tabs) - 1
+            assert sum(c["is_tab_focus"] for c in tabs) == int(tab_mode), (label, tabs)
+            hidden = len(tabs) - 1 if tab_mode else 0
+            assert sum(c["is_tab_hidden"] for c in tabs) == hidden
         assert all(not c["is_tab_hidden"] for c in clients
                    if c["title"] in masters or len(deck) < 2), (label, clients)
         if len(tabs) == 1 and masters:
@@ -240,11 +243,15 @@ def exercise(s):
                        env=s.env, check=True, timeout=5)
         s.wait(lambda: s.get("monitor", s.monitor)["tags"][0]["scroller_master_count"] == 3,
                "increment keybinding")
+        s.check("keyboard-increment", list("ABDC"), list("ABD"), ["C"])
+        assert s.get("focusing-client")["title"] == "D"
         subprocess.run(["wtype", "-M", "logo", "-k", "bracketleft", "-m", "logo"],
                        env=s.env, check=True, timeout=5)
         s.wait(lambda: s.get("monitor", s.monitor)["tags"][0]["scroller_master_count"] == 2,
                "decrement keybinding")
-        s.check("keyboard-count", list("ABCD"), list("AB"), list("CD"))
+        s.check("keyboard-count", list("ABDC"), list("AB"), list("DC"))
+        # Restore the fixture order for the independent insertion scenarios.
+        s.dispatch("exchange_stack_client,next", s.by_name()["D"]["id"])
 
     s.focus("A")
     s.open("E")
@@ -254,21 +261,26 @@ def exercise(s):
     s.check("insert-after-tab", list("AEBCFD"), list("AE"), list("BCFD"))
 
     s.dispatch("inc_scroller_master_count,+1")
-    s.check("increment", list("AEBCFD"), list("AEB"), list("CFD"))
+    s.check("increment", list("AEFBCD"), list("AEF"), list("BCD"))
     assert s.get("focusing-client")["title"] == "F"
     s.dispatch("inc_scroller_master_count,-1")
-    s.check("decrement", list("AEBCFD"), list("AE"), list("BCFD"))
+    s.check("decrement", list("AEFBCD"), list("AE"), list("FBCD"))
+    for _ in range(2):
+        s.dispatch("exchange_stack_client,next", s.by_name()["F"]["id"])
     s.dispatch("set_scroller_master_count,0")
     s.check("all-tabs", list("AEBCFD"), [], list("AEBCFD"))
     s.focus("D")
     s.expect_focus("focusdeck,next", "A")
     s.expect_focus("focusdeck,prev", "D")
+    s.focus("A")
     s.dispatch("set_scroller_master_count,99")
     s.check("all-independent", list("AEBCFD"), list("AEBCFD"), [])
+    s.focus("D")
     s.expect_focus("focusdeck,next", "D")
     s.expect_focus("focusdeck,prev", "D")
     s.dispatch("set_scroller_master_count,-1")
     s.check("negative-clamped", list("AEBCFD"), [], list("AEBCFD"))
+    s.focus("A")
     s.dispatch("inc_scroller_master_count,2147483647")
     s.check("increment-clamped", list("AEBCFD"), list("AEBCFD"), [])
     s.dispatch("set_scroller_master_count,2")
@@ -401,12 +413,14 @@ def exercise(s):
     assert all(not c["is_tab_hidden"] for c in clients.values())
     s.dispatch("setlayout,scroller-deck")
     s.check("return-from-scroller", list("AEBCFD"), ["A"], list("EBCFD"))
+    s.focus("E")
     s.dispatch("set_scroller_master_count,2")
     s.dispatch("scroller_stack,right", s.by_name()["E"]["id"])
     s.check("manual-unstack", list("AEBCFD"), list("AE"), list("BCFD"))
     clients = s.by_name()
     assert clients["A"]["x"] != clients["E"]["x"]
 
+    s.focus("B")
     s.dispatch("set_scroller_master_count,5")
     s.check("single-deck-member", list("AEBCFD"), list("AEBCF"), ["D"])
     s.focus("D")
@@ -523,6 +537,209 @@ def exercise(s):
     s.check("first-monitor-preserved", list("ABCFD"), list("AB"), list("CFD"))
     assert s.get("monitor", s.monitor)["tags"][0]["scroller_master_count"] == 2
     assert s.get("monitor", "SD-SECOND")["tags"][0]["scroller_master_count"] == 0
+
+
+def exercise_master_count(s):
+    for name in "ABCDEF":
+        s.open(name)
+
+    def check(label, order, count, focus, tab_mode=True):
+        masters, deck = list(order[:count]), list(order[count:])
+        s.check(label, list(order), masters, deck, tab_mode)
+        assert s.get("focusing-client").get("title") == focus, (label, "focus")
+        assert s.get("tag", s.monitor, "1")["scroller_master_count"] == count
+
+    s.focus("E")
+    if shutil.which("wtype"):
+        subprocess.run(["wtype", "-M", "logo", "-k", "bracketright", "-m", "logo"],
+                       env=s.env, check=True, timeout=5)
+        s.wait(lambda: s.get("tag", s.monitor, "1")["scroller_master_count"] == 3,
+               "active deck promotion keybinding")
+    else:
+        s.dispatch("inc_scroller_master_count,+1")
+    check("promote-active-tab", "ABECDF", 3, "E")
+    s.dispatch("inc_scroller_master_count,-1")
+    check("promotion-decrease-keeps-order", "ABECDF", 2, "E")
+
+    s.focus("D")
+    s.dispatch("inc_scroller_master_count,+2")
+    check("promote-active-before-additional-masters", "ABDECF", 4, "D")
+    s.dispatch("inc_scroller_master_count,-2")
+    check("promotion-decrease-multiple", "ABDECF", 2, "D")
+    s.focus("F")
+    s.dispatch("inc_scroller_master_count,0")
+    s.dispatch("set_scroller_master_count,2")
+    check("unchanged-count-keeps-order", "ABDECF", 2, "F")
+    s.dispatch("set_scroller_master_count,3")
+    check("set-count-promotes-active", "ABFDEC", 3, "F")
+
+    s.dispatch("set_scroller_master_count,0")
+    s.focus("E")
+    s.dispatch("inc_scroller_master_count,+1")
+    check("promote-without-existing-masters", "EABFDC", 1, "E")
+    s.focus("C")
+    s.focus("E")
+    s.dispatch("inc_scroller_master_count,+1")
+    check("promote-active-while-master-focused", "ECABFD", 2, "E")
+
+    s.dispatch("setoption,deck_tab_mode,0")
+    s.focus("F")
+    s.dispatch("inc_scroller_master_count,+1")
+    check("promote-without-tab-links", "ECFABD", 3, "F", False)
+    s.focus("D")
+    s.focus("C")
+    s.dispatch("inc_scroller_master_count,+1")
+    check("promote-last-active-without-tab-links", "ECFDAB", 4, "C", False)
+    s.dispatch("inc_scroller_master_count,-1")
+    check("promotion-decrease-without-tab-links", "ECFDAB", 3, "C", False)
+    s.focus("D")
+    s.dispatch("set_scroller_master_count,5")
+    s.focus("E")
+    s.dispatch("inc_scroller_master_count,+1")
+    check("promote-single-deck-member", "ECFDAB", 6, "E", False)
+    s.dispatch("inc_scroller_master_count,2147483647")
+    s.dispatch("inc_scroller_master_count,+1")
+    check("promotion-count-clamped", "ECFDAB", 1000, "E", False)
+
+    # Updating the saved count in another layout or overview must not reorder it.
+    s.dispatch("setlayout,scroller")
+    s.dispatch("set_scroller_master_count,0")
+    s.focus("B")
+    s.dispatch("inc_scroller_master_count,+1")
+    s.check("promotion-other-layout-keeps-order", list("ECFDAB"), ["E"], [])
+    s.dispatch("setlayout,scroller-deck")
+    s.dispatch("enteroverview")
+    s.focus("B")
+    s.dispatch("inc_scroller_master_count,+1")
+    s.dispatch("leaveoverview")
+    check("promotion-overview-keeps-order", "ECFDAB", 2, "B", False)
+
+
+def exercise_exchange(s):
+    for name in "ABCDE":
+        s.open(name)
+
+    def check(label, order, focus, active, tab_mode=True, count=2):
+        actual_focus = s.get("focusing-client").get("title")
+        assert actual_focus == focus, (label, "focus", actual_focus, focus)
+        tabs = [c for c in s.clients() if c["title"] in order[count:]]
+        if tab_mode and len(tabs) >= 2:
+            actual_active = [c["title"] for c in tabs if c["is_tab_focus"]]
+            assert actual_active == [active], (label, "active", actual_active, active)
+            assert not s.by_name()[active]["is_tab_hidden"], (label, active)
+        s.check(label, list(order), list(order[:count]), list(order[count:]), tab_mode)
+
+    def keyboard(keys, delay=0):
+        command = ["wtype", "-M", "logo", "-M", "ctrl"]
+        for key in keys:
+            command.extend(["-k", key])
+            if delay:
+                command.extend(["-s", str(delay)])
+        command.extend(["-m", "ctrl", "-m", "logo"])
+        subprocess.run(command, env=s.env, check=True, timeout=10)
+
+    s.focus("D")
+    if shutil.which("wtype"):
+        keyboard(["h"])
+    else:
+        s.dispatch("exchange_client,left")
+    check("exchange-deck-to-master", "ADCBE", "D", "B")
+    s.dispatch("view,2")
+    s.open("W")
+    s.dispatch("view,1")
+    check("exchange-active-survives-tag-switch", "ADCBE", "D", "B")
+    s.expect_focus("focusdir,right", "B")
+    s.expect_focus("focusdir,left", "D")
+    s.dispatch("exchange_client,right")
+    check("exchange-master-to-deck", "ABCDE", "D", "D")
+
+    # Exercise both ends of the deck, not just the tab at the boundary.
+    s.focus("C")
+    s.dispatch("exchange_client,left")
+    check("exchange-first-deck-member", "ACBDE", "C", "B")
+    s.dispatch("exchange_client,right")
+    check("exchange-first-member-restore", "ABCDE", "C", "C")
+    s.focus("E")
+    s.dispatch("exchange_client,left")
+    check("exchange-last-deck-member", "AECDB", "E", "B")
+    s.dispatch("exchange_client,right")
+    check("exchange-last-member-restore", "ABCDE", "E", "E")
+
+    s.dispatch("setoption,deck_tab_mode,0")
+    s.focus("D")
+    s.dispatch("exchange_client,left")
+    check("exchange-without-tab-links", "ADCBE", "D", "B", False)
+    s.expect_focus("focusdir,right", "B")
+    s.expect_focus("focusdir,left", "D")
+    s.dispatch("exchange_client,right")
+    check("exchange-without-tab-links-restore", "ABCDE", "D", "D", False)
+    s.dispatch("setoption,deck_tab_mode,1")
+
+    # A saved manual split that crosses the boundary must remain intact.
+    s.dispatch("setlayout,scroller")
+    s.focus("D")
+    s.dispatch("scroller_stack,left")
+    before = s.by_name()
+    assert before["C"]["x"] == before["D"]["x"]
+    assert before["C"]["y"] < before["D"]["y"]
+    s.dispatch("setlayout,scroller-deck")
+    s.focus("D")
+    s.dispatch("exchange_client,left")
+    check("exchange-ignores-saved-deck-split", "ADCBE", "D", "B")
+    s.dispatch("exchange_client,right")
+    check("exchange-saved-deck-split-restore", "ABCDE", "D", "D")
+    s.dispatch("setlayout,scroller")
+    after = s.by_name()
+    assert after["C"]["x"] == after["D"]["x"]
+    assert after["C"]["y"] < after["D"]["y"]
+    s.dispatch("scroller_stack,right", after["D"]["id"])
+    s.dispatch("setlayout,scroller-deck")
+
+    # Master-to-master swaps keep the remembered active deck member.
+    s.focus("E")
+    s.focus("B")
+    s.dispatch("exchange_client,left")
+    check("exchange-between-masters", "BACDE", "B", "E")
+    s.dispatch("exchange_client,right")
+    check("exchange-between-masters-restore", "ABCDE", "B", "E")
+    s.expect_focus("focusdir,right", "E")
+
+    if shutil.which("wtype"):
+        base_config = s.config.read_text()
+        for animations in (0, 1):
+            s.config.write_text(base_config + f"""
+animations={animations}
+animation_duration_move=200
+""")
+            s.dispatch("reload_config")
+            s.focus("D")
+            for delay in (0, 3, 9):
+                keyboard(["h", "l"] * 8, delay)
+                label = f"exchange-burst-anim{animations}-delay{delay}"
+                check(label, "ABCDE", "D", "D")
+                time.sleep(0.25)
+                check(label + "-settled", "ABCDE", "D", "D")
+        s.config.write_text(base_config)
+        s.dispatch("reload_config")
+
+    s.focus("C")
+    s.dispatch("set_scroller_master_count,4")
+    s.focus("E")
+    s.dispatch("exchange_client,left")
+    check("exchange-single-deck-member", "ABCED", "E", "D", count=4)
+    s.expect_focus("focusdir,right", "D")
+    s.expect_focus("focusdir,left", "E")
+    s.dispatch("exchange_client,right")
+    check("exchange-single-deck-member-restore", "ABCDE", "E", "E", count=4)
+
+    s.dispatch("setlayout,scroller")
+    s.focus("B")
+    s.dispatch("exchange_client,left")
+    s.check("exchange-ordinary-scroller", list("BACDE"), ["B"], [])
+    assert s.get("focusing-client").get("title") == "B"
+    s.dispatch("exchange_client,right")
+    s.check("exchange-ordinary-scroller-restore", list("ABCDE"), ["A"], [])
+    assert s.get("focusing-client").get("title") == "B"
 
 
 def exercise_close_focus(s):
@@ -697,6 +914,7 @@ animation_duration_tag=150
 """)
         s.dispatch("reload_config")
         s.dispatch("view,2")
+        s.focus("W")
         s.dispatch(f"set_scroller_master_count,{masters}")
         s.focus("Z")
         if masters:
@@ -744,7 +962,8 @@ animation_duration_tag=150
 def main():
     if len(sys.argv) != 2 or not shutil.which("foot"):
         raise SystemExit(__doc__)
-    for run in (exercise, exercise_close_focus, exercise_tag_focus):
+    for run in (exercise, exercise_master_count, exercise_exchange,
+                exercise_close_focus, exercise_tag_focus):
         session = None
         try:
             session = Session(sys.argv[1])

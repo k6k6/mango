@@ -17,7 +17,17 @@ active deck member survives tab-chain rebuilding and direction changes. With
 `wtype`, they also interleave Super+1/2 and Super+h/l at 0, 3 and 9 ms intervals,
 with animations off, vertical/horizontal tag animations on, and zero, one or two
 masters; state is checked again after animations finish. It uses a private
-runtime directory and configuration.
+runtime directory and configuration. Master-count checks promote an active tab
+away from the deck's front through a real keybinding, relative changes and an
+absolute increase. They cover unchanged order on decreases and no-ops, multiple
+new masters, zero masters, master focus, tab mode off, a singleton deck, clamping,
+and unchanged order in other layouts and overview. Exchange checks swap a master
+with the first, middle and last deck member in both directions, verify that the
+old master becomes the active deck member in the original tab slot, and keep
+keyboard focus on the initiating window. They cover tag switching, tab mode off,
+saved manual split links, a singleton deck, master-only swaps and the ordinary
+Scroller layout. With `wtype`, continuous exchange key presses run at 0, 3 and 9 ms
+intervals with animations off and on, checking immediate and settled state.
 
 ```sh
 meson setup /tmp/mango-scroller-deck-build . -Dasan=true -Dbuildtype=debugoptimized
@@ -31,8 +41,8 @@ wlroots' headless backend.
 
 Additional checks run when the tools are installed:
 
-- `wtype`: send actual virtual keyboard events to the count, deck focus and
-  close bindings, and Ctrl+D to close a terminal from inside its application.
+- `wtype`: send actual virtual keyboard events to the count, deck focus,
+  exchange and close bindings, and Ctrl+D to close a terminal from inside its application.
   The fixture uses `binds` to match symbols because wtype provides its own keymap.
 - `wayland-scanner`, `cc`, `pkg-config`, Wayland client development files, and
   `/usr/share/wlr-protocols/unstable/wlr-virtual-pointer-unstable-v1.xml`: compile

@@ -653,16 +653,47 @@ int32_t inc_nmaster(const Arg *arg) {
 	return 0;
 }
 
+static void promote_scroller_deck_active(Monitor *m) {
+	Client *active = m->sel;
+	Client *c;
+	if (!VISIBLEON(active, m) || !ISSCROLLTILED(active) || active->ismaster) {
+		active = NULL;
+		/* Match the deck's column anchor even with tabs disabled or a master
+		 * focused: the most recently focused eligible deck member is active. */
+		wl_list_for_each(c, &server.focus_stack, flink) {
+			if (VISIBLEON(c, m) && ISSCROLLTILED(c) && !c->ismaster) {
+				active = c;
+				break;
+			}
+		}
+	}
+	if (!active)
+		return;
+
+	/* The first deck slot becomes the next master. Keep every other client's
+	 * relative order and leave saved manual scroller stack links intact. */
+	wl_list_for_each(c, &server.clients, link) {
+		if (VISIBLEON(c, m) && ISSCROLLTILED(c) && !c->ismaster) {
+			wl_list_safe_reinsert_prev(&c->link, &active->link);
+			break;
+		}
+	}
+}
+
 static int32_t update_scroller_master_count(const Arg *arg, bool relative) {
 	Monitor *m = server.selected_monitor;
 	if (!arg || !m)
 		return 0;
 	uint32_t tag = get_mon_curtag(m);
+	int32_t old_count = m->pertag->scroller_master_count[tag];
 	int64_t count = arg->i;
 	if (relative)
-		count += m->pertag->scroller_master_count[tag];
-	m->pertag->scroller_master_count[tag] =
-		MANGO_MAX(0, MANGO_MIN(count, 1000));
+		count += old_count;
+	count = MANGO_MAX(0, MANGO_MIN(count, 1000));
+	if (count > old_count && !m->isoverview &&
+		m->pertag->ltidxs[tag]->id == SCROLLER_DECK)
+		promote_scroller_deck_active(m);
+	m->pertag->scroller_master_count[tag] = count;
 	arrange(m, false, false);
 	return 0;
 }
