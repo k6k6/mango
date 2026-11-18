@@ -193,6 +193,7 @@ tag_rule=id:*,Parameter:Values
 | `open_as_floating` | integer | `0` / `1` | New open window will be floating|
 | `no_hide` | integer | `0` / `1` | Not hide even if the tag is empty |
 | `master_count` | integer | 0, 99 | Number of master windows |
+| `scroller_master_count` | integer | 0–1000 | Number of windows excluded from automatic tabs in `scroller-deck` |
 | `master_factor` | float | 0.1–0.9 | Master area factor |
 | `scroller_default_proportion` | float | 0.1-1.0 | Set scroller  default proportion. |
 | `scroller_default_proportion_single` | float | 0.1-1.0 | Set scroller auto adjust proportion when it is single window(only apply when set `scroller_ignore_proportion_single` to `0`) |

@@ -37,7 +37,9 @@ uint32_t want_restore_fullscreen(Client *target_client) {
 			c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id !=
 				SCROLLER &&
 			c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id !=
-				VERTICAL_SCROLLER) {
+				VERTICAL_SCROLLER &&
+			c->mon->pertag->ltidxs[get_tags_first_tag_num(c->tags)]->id !=
+				SCROLLER_DECK) {
 			return 0;
 		}
 	}

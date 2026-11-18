@@ -127,6 +127,9 @@ bool is_scroller_layout(Monitor *m) {
 	if (m->pertag->ltidxs[get_mon_curtag(m)]->id == VERTICAL_SCROLLER)
 		return true;
 
+	if (m->pertag->ltidxs[get_mon_curtag(m)]->id == SCROLLER_DECK)
+		return true;
+
 	return false;
 }
 
@@ -227,6 +230,7 @@ void monitor_copy_tag_layout(Monitor *target, const Monitor *source,
 	const Pertag *src = source->pertag;
 
 	dst->nmasters[tag] = src->nmasters[tag];
+	scroller_deck_copy_tag(dst, tag, src, tag);
 	dst->mfacts[tag] = src->mfacts[tag];
 	dst->no_hide[tag] = src->no_hide[tag];
 	dst->no_render_border[tag] = src->no_render_border[tag];
@@ -845,6 +849,7 @@ void handle_new_output(struct wl_listener *listener, void *data) {
 
 	for (i = 0; i <= config.tag_num; i++) {
 		m->pertag->nmasters[i] = config.default_nmaster;
+		scroller_deck_tag_defaults(m, i);
 		m->pertag->mfacts[i] = config.default_mfact;
 		m->pertag->ltidxs[i] = &layouts[0];
 	}

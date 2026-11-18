@@ -1097,6 +1097,8 @@ Client *find_client_by_direction(Client *tc, const Arg *arg,
 				continue;
 			if (c->isunglobal)
 				continue;
+			if (scroller_deck_hidden_tab(c))
+				continue;
 			if (!config.focus_cross_monitor && c->mon != tc->mon)
 				continue;
 			if (!(c->tags & c->mon->tagset[c->mon->seltags]) && !c->isglobal)
@@ -1332,6 +1334,9 @@ bool client_is_in_same_stack(Client *sc, Client *tc, Client *fc) {
 		return false;
 
 	uint32_t id = sc->mon->pertag->ltidxs[get_client_tag_idx(sc)]->id;
+	int32_t deck_same_stack = scroller_deck_same_stack(sc, tc, fc);
+	if (deck_same_stack >= 0)
+		return deck_same_stack;
 
 	if ((id != SCROLLER && id != VERTICAL_SCROLLER) &&
 		tc->mon != server.selected_monitor &&
@@ -2210,6 +2215,8 @@ static void client_insert_tiling_order(Client *c) {
 			VISIBLEON(server.selected_monitor->sel, server.selected_monitor)) {
 			at_client =
 				scroll_get_stack_tail_client(server.selected_monitor->sel);
+			at_client = scroller_deck_insert_anchor(
+				server.selected_monitor->sel, at_client);
 		} else {
 			at_client = center_tiled_select(server.selected_monitor);
 		}
@@ -2444,6 +2451,7 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 	Client *c = wl_container_of(listener, c, unmap);
 	Monitor *m = NULL;
 	Client *nextfocus = NULL;
+	Client *deck_nextfocus = scroller_deck_focus_after_close(c);
 	c->iskilling = 1;
 	if (c->tab_prev || c->tab_next)
 		tab_detach_client(c);
@@ -2510,6 +2518,8 @@ void handle_client_unmap(struct wl_listener *listener, void *data) {
 		} else {
 			nextfocus = client_focus_top(server.selected_monitor);
 		}
+		if (deck_nextfocus)
+			nextfocus = deck_nextfocus;
 
 		if (nextfocus && !VISIBLEON(nextfocus, server.selected_monitor)) {
 			nextfocus = client_focus_top(server.selected_monitor);
@@ -3565,7 +3575,7 @@ void clear_fullscreen_and_maximized_state(Monitor *m) {
 void clear_fullscreen_flag(Client *c) {
 	uint32_t id = c->mon->pertag->ltidxs[get_client_tag_idx(c)]->id;
 
-	if (!c->isfloating && (id == SCROLLER || id == VERTICAL_SCROLLER ||
+	if (!c->isfloating && (is_scroller_layout_id(id) ||
 						   (id == MONOCLE && config.monocle_tab_mode))) {
 		return;
 	}
@@ -3763,6 +3773,7 @@ void client_exchange(Client *c1, Client *c2) {
 	if (m1 != m2) {
 		client_swap_monitors_and_tags(c1, c2);
 	}
+	scroller_deck_exchange(c1, c2);
 
 	finish_exchange_arrange_and_focus(c1, c2, m1, m2);
 }
@@ -3878,7 +3889,7 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 	const Layout *layout = w->mon->pertag->ltidxs[get_client_tag_idx(w)];
 
 	if (layout->id == DWINDLE || layout->id == SCROLLER ||
-		layout->id == VERTICAL_SCROLLER) {
+		layout->id == VERTICAL_SCROLLER || layout->id == SCROLLER_DECK) {
 
 		for (uint32_t t = 0; t < PERTAG_SLOTS; t++) {
 			/* dwindle */
@@ -3893,7 +3904,7 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 			}
 
 			// scroller
-			if (layout->id == SCROLLER || layout->id == VERTICAL_SCROLLER) {
+			if (is_scroller_layout_id(layout->id)) {
 				struct TagScrollerState *st = w->mon->pertag->scroller_state[t];
 				if (!st)
 					continue;
@@ -3909,7 +3920,7 @@ void client_replace(Client *c, Client *w, bool is_group_change_member,
 	}
 
 	/* Syncs the global client fields of the currently active tag. */
-	if (layout->id == SCROLLER || layout->id == VERTICAL_SCROLLER) {
+	if (is_scroller_layout_id(layout->id)) {
 		sync_scroller_state_to_clients(w->mon, get_client_tag_idx(w));
 	}
 
@@ -3992,7 +4003,7 @@ void client_move_to_monitor(Client *c, Client *target, int32_t dir) {
 
 	client_reassign_monitor(c, dst_mon);
 
-	if (layout->id == SCROLLER || layout->id == VERTICAL_SCROLLER) {
+	if (is_scroller_layout_id(layout->id)) {
 		bool along_axis = (layout->id == VERTICAL_SCROLLER)
 							  ? (dir == UP || dir == DOWN)
 							  : (dir == LEFT || dir == RIGHT);

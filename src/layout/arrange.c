@@ -804,6 +804,8 @@ void resize_tile_scroller(Client *gc, bool isdrag, int32_t offsetx,
 		return;
 	if (gc->mon->isoverview)
 		return;
+	if (scroller_deck_resize(gc, isdrag, offsetx, offsety))
+		return;
 
 	Monitor *m = gc->mon;
 	uint32_t tag = get_client_tag_idx(gc);
@@ -1031,7 +1033,8 @@ void resize_tile_client(Client *gc, bool isdrag, int32_t offsetx,
 			   current_layout->id == VERTICAL_DECK) {
 		resize_tile_master_vertical(gc, isdrag, offsetx, offsety,
 									current_layout->id);
-	} else if (current_layout->id == SCROLLER) {
+	} else if (current_layout->id == SCROLLER ||
+			   current_layout->id == SCROLLER_DECK) {
 		resize_tile_scroller(gc, isdrag, offsetx, offsety, false);
 	} else if (current_layout->id == VERTICAL_SCROLLER) {
 		resize_tile_scroller(gc, isdrag, offsetx, offsety, true);
@@ -1072,6 +1075,7 @@ void reset_size_per_mon(Monitor *m, double total_left_stack_weight,
 	uint32_t tag = get_mon_curtag(m);
 	uint32_t nmasters = m->pertag->nmasters[tag];
 	bool centered = m->pertag->ltidxs[tag]->id == CENTER_TILE;
+	nmasters = scroller_deck_nmasters(m, tag, nmasters);
 
 	wl_list_for_each(c, &server.clients, link) {
 		if (!VISIBLEON(c, m) || !ISFAKETILED(c))
@@ -1137,7 +1141,7 @@ void pre_calculate_before_arrange(Monitor *m, bool want_animation,
 	struct TagScrollerState *st = m->pertag->scroller_state[tag];
 
 	const Layout *cur_layout = m->pertag->ltidxs[tag];
-	if (cur_layout->id == SCROLLER || cur_layout->id == VERTICAL_SCROLLER) {
+	if (is_scroller_layout_id(cur_layout->id)) {
 		update_scroller_state(m);
 	}
 
@@ -1190,6 +1194,7 @@ void pre_calculate_before_arrange(Monitor *m, bool want_animation,
 	}
 
 	nmasters = m->pertag->nmasters[get_mon_curtag(m)];
+	nmasters = scroller_deck_nmasters(m, tag, nmasters);
 
 	wl_list_for_each(c, &server.clients, link) {
 		if (c->iskilling)
@@ -1274,6 +1279,7 @@ void tag_gather_reset_slot(Monitor *m, uint32_t tag) {
 	m->pertag->open_as_floating[tag] = 0;
 	m->pertag->dwindle_root[tag] = NULL;
 	m->pertag->scroller_state[tag] = NULL;
+	scroller_deck_reset_tag(m, tag);
 
 	for (i = 0; i < config.tag_rules_count; i++) {
 		const ConfigTagRule *tr = &config.tag_rules[i];
@@ -1288,6 +1294,7 @@ void tag_gather_reset_slot(Monitor *m, uint32_t tag) {
 // move pertag state from src to dst, then reset src.
 void tag_gather_move_pertag(Monitor *m, uint32_t dst, uint32_t src) {
 	m->pertag->nmasters[dst] = m->pertag->nmasters[src];
+	scroller_deck_copy_tag(m->pertag, dst, m->pertag, src);
 	m->pertag->mfacts[dst] = m->pertag->mfacts[src];
 	m->pertag->no_hide[dst] = m->pertag->no_hide[src];
 	m->pertag->no_render_border[dst] = m->pertag->no_render_border[src];
@@ -1394,6 +1401,7 @@ Layout layouts[] = {
 	{"DW", dwindle, "dwindle", DWINDLE},
 	{"F", fair, "fair", FAIR},
 	{"VF", vertical_fair, "vertical_fair", VERTICAL_FAIR},
+	{"SK", scroller_deck, "scroller-deck", SCROLLER_DECK},
 };
 
 bool special_handle_empty_view(Monitor *m, bool from_view) {

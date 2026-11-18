@@ -37,6 +37,8 @@ static void tab_chain_focus(Client *head) {
 			focus = it;
 	}
 
+	if (!sel && !focus)
+		focus = scroller_deck_tab_focus(head);
 	focus = sel ? sel : (focus ? focus : head);
 
 	for (Client *it = head; it; it = it->tab_next)
@@ -54,7 +56,7 @@ static void tab_leave(Client *c) {
 static bool tab_layout_id_supported(uint32_t id) {
 	if (id == MONOCLE)
 		return config.monocle_tab_mode;
-	if (id == DECK || id == VERTICAL_DECK)
+	if (id == DECK || id == VERTICAL_DECK || id == SCROLLER_DECK)
 		return config.deck_tab_mode;
 	return false;
 }
@@ -81,7 +83,7 @@ static bool tab_is_stack_candidate(Monitor *m, Client *target) {
 	uint32_t id = m->pertag->ltidxs[get_mon_curtag(m)]->id;
 	if (id == MONOCLE)
 		return true;
-	if (id != DECK && id != VERTICAL_DECK)
+	if (id != DECK && id != VERTICAL_DECK && id != SCROLLER_DECK)
 		return false;
 	return !target->ismaster;
 }

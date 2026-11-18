@@ -988,6 +988,8 @@ int32_t set_proportion(const Arg *arg) {
 	Client *tc = arg->tc ? arg->tc : server.selected_monitor->sel;
 	if (!tc)
 		return 0;
+	if (scroller_deck_set_proportion(tc, arg->f))
+		return 0;
 
 	tc = scroll_get_stack_head_client(tc);
 	if (!tc)
@@ -1036,6 +1038,8 @@ int32_t switch_proportion_preset(const Arg *arg) {
 
 	if (tc->isfloating)
 		return 0; // Do not switch scroller proportions for floating windows
+	if (scroller_deck_switch_proportion_preset(tc))
+		return 0;
 
 	tc = scroll_get_stack_head_client(tc);
 	if (!tc)
@@ -1279,6 +1283,8 @@ int32_t center_window(const Arg *arg) {
 	}
 
 	if (!is_scroller_layout(server.selected_monitor))
+		return 0;
+	if (scroller_deck_center_window(c))
 		return 0;
 
 	Client *stack_head = scroll_get_stack_head_client(c);
@@ -2586,6 +2592,8 @@ int32_t sleep_toggle_monitor(const Arg *arg) {
 
 void scroller_apply_stack(Client *c, Client *target_client, int32_t direction) {
 	if (!c || !c->mon || c->isfloating || !is_scroller_layout(c->mon))
+		return;
+	if (scroller_deck_blocks_apply_stack(c, target_client, &direction))
 		return;
 
 	Monitor *m = c->mon;

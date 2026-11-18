@@ -4,6 +4,7 @@
 #include "mango/common/types.h"
 #include "mango/config/parse.h"
 #include "mango/config/preset.h"
+#include "mango/layout/scroller_deck.h"
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -112,6 +113,7 @@ struct Pertag {
 	const Layout *config_ltidxs[PERTAG_SLOTS];
 	const Layout *ltidxs[PERTAG_SLOTS];
 	struct TagScrollerState *scroller_state[PERTAG_SLOTS];
+	struct ScrollerDeckTagState scroller_deck[PERTAG_SLOTS];
 };
 
 bool is_special_active(const Monitor *m);

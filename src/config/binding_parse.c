@@ -13,6 +13,7 @@
 #include "mango/common/log.h"
 #include "mango/dispatch/bind.h"
 #include "mango/input/pointer.h"
+#include "mango/layout/scroller_deck.h"
 #include "mango/manage/client.h"
 #include "mango/switcher/switcher.h"
 #include <wlr/types/wlr_keyboard.h>
@@ -508,6 +509,8 @@ FuncType parse_func_name(char *func_name, Arg *arg, char *arg_value,
 	(*arg).v2 = NULL;
 	(*arg).v3 = NULL;
 
+	if ((func = scroller_deck_parse_func(func_name, arg, arg_value)))
+		return func;
 	if (strcmp(func_name, "focusstack") == 0) {
 		func = focus_stack;
 		(*arg).i = parse_circle_direction(arg_value);

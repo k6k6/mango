@@ -260,6 +260,8 @@ static void scroller_normalize_stack_weights(struct ScrollerStackNode *head) {
 
 void scroller_arrange_stack_node(struct ScrollerStackNode *head,
 								 struct wlr_box geometry, int32_t gappiv) {
+	if (scroller_deck_arrange_column(head, geometry))
+		return;
 	int32_t stack_size = 0;
 	struct ScrollerStackNode *iter = head;
 	while (iter) {
@@ -834,6 +836,8 @@ void scroller_insert_stack(Client *c, Client *target_client,
 						   bool insert_before) {
 	if (!target_client || target_client->mon != c->mon)
 		return;
+	if (scroller_deck_blocks_stack(c, target_client))
+		return;
 
 	if (c->isfullscreen)
 		client_set_fullscreen(c, 0, true);
@@ -887,6 +891,8 @@ void scroller_insert_stack(Client *c, Client *target_client,
 }
 
 void scroller_drop_tile(Client *c, Client *closest, int vertical) {
+	if (scroller_deck_drop_tile(c, closest))
+		return;
 
 	// Must update first; otherwise nodes inside still hold cnode info and
 	// stack_head/stack_tail would point at the wrong clients.
@@ -939,6 +945,9 @@ void scroller_drop_tile(Client *c, Client *closest, int vertical) {
 Client *scroll_get_stack_head_client(Client *c) {
 	if (!c || !c->mon)
 		return c;
+	Client *deck_end;
+	if (scroller_deck_stack_end(c, false, &deck_end))
+		return deck_end;
 	uint32_t tag = get_client_tag_idx(c);
 	struct TagScrollerState *st = c->mon->pertag->scroller_state[tag];
 	if (st) {
@@ -955,6 +964,9 @@ Client *scroll_get_stack_head_client(Client *c) {
 Client *scroll_get_stack_tail_client(Client *c) {
 	if (!c || !c->mon)
 		return c;
+	Client *deck_end;
+	if (scroller_deck_stack_end(c, true, &deck_end))
+		return deck_end;
 	uint32_t tag = get_client_tag_idx(c);
 	struct TagScrollerState *st = c->mon->pertag->scroller_state[tag];
 	if (st) {

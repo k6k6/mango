@@ -82,4 +82,9 @@ Allows sending commands to the compositor to alter its state.
 mmsg dispatch exchange_client,left client,375
 # operate current client
 mmsg dispatch exchange_client,left
+
+# change the current tag's scroller-deck layout and independent window count
+mmsg dispatch setlayout,scroller-deck
+mmsg dispatch inc_scroller_master_count,+1
+mmsg dispatch set_scroller_master_count,2
 ````

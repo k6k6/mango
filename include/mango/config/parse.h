@@ -203,6 +203,7 @@ typedef struct {
 	int32_t no_render_border;
 	int32_t open_as_floating;
 	int32_t no_hide;
+	int32_t scroller_master_count;
 } ConfigTagRule;
 
 typedef struct {
@@ -571,6 +572,7 @@ typedef struct {
 	DecorateDrawData title_message_bardata;
 
 	int32_t hdr_depth;
+	int32_t default_scroller_master_count;
 } Config;
 
 /* Global config instance. */

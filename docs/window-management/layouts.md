@@ -9,6 +9,7 @@ mangowm supports a variety of layouts that can be assigned per tag.
 
 - `tile`
 - `scroller`
+- `scroller-deck`
 - `monocle`
 - `grid`
 - `deck`
@@ -61,6 +62,13 @@ edge_scroller_focus_allow_speed=0.0
 scroller_default_proportion_single=1.0
 scroller_proportion_preset=0.5,0.8,1.0
 ```
+
+---
+
+## Scroller-Deck Layout
+
+`scroller-deck` keeps the first N windows as Scroller columns and tabs the rest
+into one deck column. See [Scroller-Deck](/docs/window-management/scroller-deck) for details.
 
 ---
 
